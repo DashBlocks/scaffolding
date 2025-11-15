@@ -37,10 +37,14 @@ class Monitor {
       label = this.parent.getMessage('var-x');
     } else if (this.opcode === 'motion_yposition') {
       label = this.parent.getMessage('var-y');
+    } else if (this.opcode === 'motion_position') {
+      label = this.parent.getMessage('var-position');
     } else if (this.opcode === 'motion_direction') {
       label = this.parent.getMessage('var-direction');
     } else if (this.opcode === 'sensing_username') {
       label = this.parent.getMessage('var-username');
+    } else if (this.opcode === 'looks_isvisible') {
+      label = this.parent.getMessage('var-visible');
     } else if (this.opcode === 'looks_costumenumbername') {
       if (this.params.NUMBER_NAME === 'number') {
         label = this.parent.getMessage('var-costume-number');
@@ -55,6 +59,8 @@ class Monitor {
       }
     } else if (this.opcode === 'looks_size') {
       label = this.parent.getMessage('var-size');
+    } else if (this.opcode === 'control_is_paused') {
+      label = this.parent.getMessage('var-paused');
     } else if (this.opcode === 'sensing_answer') {
       label = this.parent.getMessage('var-answer');
     } else if (this.opcode === 'sensing_mousedown') {
@@ -63,6 +69,8 @@ class Monitor {
       label = this.parent.getMessage('var-mousex');
     } else if (this.opcode === 'sensing_mousey') {
       label = this.parent.getMessage('var-mousey');
+    } else if (this.opcode === 'sensing_mousexy') {
+      label = this.parent.getMessage('var-mousexy');
     } else if (this.opcode === 'sensing_loudness') {
       label = this.parent.getMessage('var-loudness');
     } else if (this.opcode === 'sensing_timer') {
