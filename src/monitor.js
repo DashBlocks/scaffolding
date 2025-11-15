@@ -135,10 +135,49 @@ class Monitor {
 class VariableMonitor extends Monitor {
   constructor (parent, monitor) {
     super(parent, monitor);
-
+    this.value = monitor.get('value');
     this.mode = monitor.get('mode');
 
-    if (this.mode === 'large') {
+    if (typeof this.value === "object" && this.value instanceof Object && !Array.isArray(this.value)) {
+      this.isObject = true;
+      this.editable = false;
+      this.rows = new Map();
+      this.cachedRows = [];
+      this.scrollTop = 0;
+      this.oldLength = -1;
+
+      this.label = document.createElement('div');
+      this.label.className = 'sc-monitor-list-label';
+      this.label.textContent = this.getLabel();
+
+      this.footer = document.createElement('div');
+      this.footer.className = 'sc-monitor-list-footer';
+
+      this.footerText = document.createElement('div');
+      this.footerText.className = 'sc-monitor-list-footer-text';
+
+      this.rowsOuter = document.createElement('div');
+      this.rowsOuter.className = 'sc-monitor-rows-outer';
+
+      this.rowsInner = document.createElement('div');
+      this.rowsInner.className = 'sc-monitor-rows-inner';
+      this.rowsInner.addEventListener('scroll', this._onscroll.bind(this), { passive: true });
+
+      this.endPoint = document.createElement('div');
+      this.endPoint.className = 'sc-monitor-rows-endpoint';
+
+      this.emptyLabel = document.createElement('div');
+      this.emptyLabel.textContent = parent.getMessage('list-empty');
+      this.emptyLabel.className = 'sc-monitor-empty';
+
+      this.rowsInner.appendChild(this.endPoint);
+      this.rowsInner.appendChild(this.emptyLabel);
+      this.rowsOuter.appendChild(this.rowsInner);
+      this.footer.appendChild(this.footerText);
+      this.root.appendChild(this.label);
+      this.root.appendChild(this.rowsOuter);
+      this.root.appendChild(this.footer);
+    } else if (this.mode === 'large') {
       this.valueElement = document.createElement('div');
       this.valueElement.className = 'sc-monitor-large-value sc-monitor-value-color';
 
@@ -185,6 +224,98 @@ class VariableMonitor extends Monitor {
     this._value = '';
   }
 
+  _onscroll (e) {
+    this.scrollTop = e.target.scrollTop;
+    this.updateValue(this.value);
+  }
+
+  getValue () {
+    return this.getVmVariable().value;
+  }
+
+  setValue (value) {
+    const variable = this.getVmVariable();
+    variable.value = value;
+    this.updateValue(value);
+  }
+
+  createRow (index, key) {
+    const row = this.cachedRows.pop() || new Row(this);
+    row.setIndex(index);
+    row.indexEl.textContent = key;
+    row.setValue('');
+    this.rows.set(index, row);
+
+    let foundPlaceInDOM = false;
+    for (const root of this.rowsInner.children) {
+      const otherIndexString = root.dataset.index;
+      if (!otherIndexString) {
+        continue;
+      }
+      const otherIndexNumber = +otherIndexString;
+      if (otherIndexNumber > index) {
+        this.rowsInner.insertBefore(row.root, root);
+        foundPlaceInDOM = true;
+        break;
+      }
+    }
+    if (!foundPlaceInDOM) {
+      this.rowsInner.appendChild(row.root);
+    }
+
+    return row;
+  }
+
+  updateValue (value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      value = {};
+    }
+    this.value = value;
+    const entries = Object.entries(value);
+
+    if (entries.length !== this.oldLength) {
+      this.oldLength = entries.length;
+      this.footerText.textContent = this.parent.getMessage('list-length').replace('{n}', entries.length);
+      this.endPoint.style.transform = `translateY(${entries.length * ROW_HEIGHT}px)`;
+      this.emptyLabel.style.display = entries.length ? 'none' : '';
+    }
+
+    if (!this.height) this.height = this.root.clientHeight || 200;
+
+    let startIndex = Math.floor(this.scrollTop / ROW_HEIGHT) - 5;
+    if (startIndex < 0) startIndex = 0;
+    let endIndex = Math.ceil((this.scrollTop + this.height) / ROW_HEIGHT) + 3;
+    if (endIndex > entries.length - 1) endIndex = entries.length - 1;
+
+    for (const index of this.rows.keys()) {
+      if (index < startIndex || index > endIndex) {
+        const row = this.rows.get(index);
+        if (!row.locked || index >= entries.length) {
+          row.unfocus();
+          row.root.remove();
+          this.rows.delete(index);
+          if (this.cachedRows.length < 10) {
+            this.cachedRows.push(row);
+          }
+        }
+      }
+    }
+
+    for (let i = startIndex; i <= endIndex; i++) {
+      const row = this.rows.get(i);
+      const key = entries[i] && entries[i][0];
+      const val = entries[i] && entries[i][1];
+      const text = (typeof val === 'object') ? JSON.stringify(val) : String(val === undefined ? '' : val);
+      if (row) {
+        row.setValue(text);
+        row.indexEl.textContent = key;
+      } else {
+        const created = this.createRow(i, key);
+        created.setValue(text);
+      }
+    }
+  }
+
   setVariableValue (value) {
     const variable = this.getVmVariable();
     variable.value = value;
@@ -204,6 +335,16 @@ class VariableMonitor extends Monitor {
     super.update(monitor);
 
     if (!this.visible) {
+      return;
+    }
+
+    if (this.isObject) {
+      this.width = monitor.get('width') || 100;
+      this.height = monitor.get('height') || 200;
+      this.root.style.width = `${this.width}px`;
+      this.root.style.height = `${this.height}px`;
+
+      this.updateValue(monitor.get('value'));
       return;
     }
 
@@ -367,7 +508,9 @@ class Row {
       this.index = index;
       this.root.dataset.index = index;
       this.root.style.transform = `translateY(${index * ROW_HEIGHT}px)`;
-      this.indexEl.textContent = index + 1;
+      if (!this.monitor.isObject) {
+        this.indexEl.textContent = index + 1;
+      }
     }
   }
 
