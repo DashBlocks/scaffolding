@@ -1,4 +1,5 @@
 import Packages from './packages.js';
+import PseudoConsole from './pseudo-console.js';
 import VideoProvider from './video-provider.js';
 import {CloudManager} from './cloud-variables.js';
 import ControlBar from './control-bar.js';
@@ -58,6 +59,7 @@ class Scaffolding extends EventTarget {
 
     this.width = 480;
     this.height = 360;
+    this.stageMode = '2d';
     this.resizeMode = 'preserve-ratio';
     this.editableLists = false;
     this.shouldConnectPeripherals = true;
@@ -326,6 +328,9 @@ class Scaffolding extends EventTarget {
     this.vm = new Packages.VM();
     this.vm.setCompatibilityMode(true);
     this.vm.setLocale(navigator.language);
+
+    this._updateStageMode();
+
     this.vm.on('MONITORS_UPDATE', this._onmonitorsupdate.bind(this));
     this.vm.runtime.on('QUESTION', this._onquestion.bind(this));
     this.vm.on('PROJECT_RUN_START', () => this.dispatchEvent(new Event('PROJECT_RUN_START')));
@@ -348,6 +353,11 @@ class Scaffolding extends EventTarget {
         this.height = height;
         this.relayout();
       }
+    });
+
+    this.vm.on('STAGE_MODE_CHANGED', (mode) => {
+      this.stageMode = mode;
+      this._updateStageMode();
     });
 
     this.cloudManager = new CloudManager(this);
@@ -473,11 +483,18 @@ class Scaffolding extends EventTarget {
       .then(() => {
         this.vm.setCloudProvider(this.cloudManager);
         this.cloudManager.projectReady();
-        this.renderer.draw();
-        // Render again after a short delay because some costumes are loaded async
-        setTimeout(() => {
+        if (this.stageMode === 'console') {
+          this._updateConsole();
+          setTimeout(() => {
+            this._updateConsole();
+          });
+        } else if (this.stageMode === '2d') {
           this.renderer.draw();
-        });
+          // Render again after a short delay because some costumes are loaded async
+          setTimeout(() => {
+            this.renderer.draw();
+          });
+        }
 
         if (this.shouldConnectPeripherals) {
           this._connectPeripherals();
@@ -574,6 +591,45 @@ class Scaffolding extends EventTarget {
       throw new Error('Invalid list value');
     }
     this._lookupVariable(name, 'list').value = value;
+  }
+  
+  _updateStageMode() {
+    if (this.stageMode === 'console') {
+      if (!this._console) {
+        this._canvas.style.display = 'none';
+        this._console = document.createElement('div');
+        this._console.className = 'sc-pseudo-console-wrapper';
+        this._addLayer(this._console);
+        this._consoleLines = new Array();
+        this._consoleCursor = {
+          row: 0,
+          symbol: 0
+        };
+        this._consoleLinesCount = 25;
+        this._consoleSymbols = 80;
+        new PseudoConsole(this);
+      } else {
+        this._canvas.style.display = 'none';
+      }
+    } else if (this.stageMode === '2d') {
+      if (this._canvas) {
+        this._canvas.style.display = '';
+      }
+      if (this._console) {
+        this._console.style.display = 'none';
+      }
+    }
+  }
+
+  _updateConsole() {
+    if (!this._consoleLines) return;
+    this._console.innerHTML = '';
+    this._consoleLines.forEach(line => {
+      const span = document.createElement('span');
+      span.textContent = line;
+      span.style.display = 'block';
+      this._console.appendChild(span);
+    });
   }
 }
 
